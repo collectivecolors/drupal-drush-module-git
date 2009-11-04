@@ -38,16 +38,54 @@ function git_drush_command() {
   $items['git init'] = array(
     'callback' => 'drush_git_init',
     'description' => "Initialize a Drupal base repository or a site.",
+    'arguments' => array(
+      'origin' => 'Origin url of the base repository for this site.  Not used on base installations.',
+      'directory' => 'Directory to put this Drupal site into.  Defaults to "drupal-$VERSION".',
+    ),
+    'options' => array(
+      '--base' => 'Specify this flag if you are initializing a base Drupal repository.',
+    ),
+    'examples' => array(
+      'git init git://example.com/drupal-6' => 'Initialize a new Drupal site into a "drupal-$VERSION" directory.',
+      'git init git://example.com/drupal-6 mysite' => 'Initialize a new Drupal site into the "mysite" directory.',
+      'git init --base drupal' => 'Initialize a base repository into the "drupal" directory.',
+    ),
   );
   
   $items['git dl'] = array(
     'callback' => 'drush_git_dl',
     'description' => "Install or upgrade Drupal packages in a base repository or site.",
+    'arguments' => array(
+      'projects' => 'A space separated list of project names, with optional version.',
+    ),
+    'options' => array(
+      '--base' => 'Specify this flag if you are installing to a base Drupal repository.',
+      '--destination' => 'Path to which the project will be copied.  Only used when "--base" option is specified.',
+      '--ssh-url' => 'Url of the base repository to syncronize to.  Not used when "--base" option is specified.',
+    ),
+    'examples' => array(
+      'git dl' => 'Download latest version of Drupal packages.', 
+      'git dl diff-6.x-2.0' => 'Download a specfic version of diff module.',
+      'git dl cck zen' => 'Download latest versions of Zen for my version of Drupal.',
+      'git dl --ssh-url you@example.com:/repo/drupal devel' => 'Download latest version of devel and update base repository first if package does not exist.',
+      'git dl --base admin_menu devel cck views' => 'Download latest versions of these modules into the current base repository.'
+    ),
   );  
   
   $items['git update'] = array(
     'callback' => 'drush_git_update',
     'description' => "Update Drupal repository and all sub packages.",
+    'arguments' => array(
+      'modules' => 'Optional. A space delimited list of installed projects to update (currently only modules).',
+    ),
+    'options' => array(
+      '--base' => 'Specify this flag if you are installing to a base Drupal repository.',
+      '--backup-dir' => 'Specify a directory to backup packages into, defaults to a backup directory within your Drupal root.',
+    ),
+    'examples' => array(
+      'git update' => 'Update all projects in Drupal site', 
+      'git update --base' => 'Update all Drupal packages in the base Drupal repository.',
+    ),
   );  
 
   return $items;
