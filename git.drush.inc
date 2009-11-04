@@ -58,7 +58,7 @@ function git_drush_command() {
     'callback' => 'drush_git_dl',
     'description' => "Install or upgrade Drupal packages in a base repository or site.",
     'arguments' => array(
-      'projects' => 'A space separated list of project names, with optional version.',
+      'packages' => 'A space separated list of project names, with optional version.',
     ),
     'options' => array(
       '--base' => 'Specify this flag if you are installing to a base Drupal repository.',
@@ -72,13 +72,14 @@ function git_drush_command() {
       'git dl --ssh-url you@example.com:/repo/drupal devel' => 'Download latest version of devel and update base repository first if package does not exist.',
       'git dl --base admin_menu devel cck views' => 'Download latest versions of these modules into the current base repository.'
     ),
+    'bootstrap' => DRUSH_BOOTSTRAP_DRUSH, // No bootstrap at all.
   );  
   
   $items['git update'] = array(
     'callback' => 'drush_git_update',
     'description' => "Update Drupal repository and all sub packages.",
     'arguments' => array(
-      'modules' => 'Optional. A space delimited list of installed projects to update (currently only modules).',
+      'packages' => 'Optional. A space delimited list of installed projects to update (currently only modules).',
     ),
     'options' => array(
       '--base' => 'Specify this flag if you are installing to a base Drupal repository.',
@@ -88,6 +89,7 @@ function git_drush_command() {
       'git update' => 'Update all projects in Drupal site', 
       'git update --base' => 'Update all Drupal packages in the base Drupal repository.',
     ),
+    'bootstrap' => DRUSH_BOOTSTRAP_DRUSH, // No bootstrap at all.
   );  
 
   return $items;
@@ -124,9 +126,9 @@ function git_drush_help($section) {
 // Callbacks
 
 /**
- * Git init
+ * git init
  * 
- * drush git init --base [ --version $PACKAGE ] [ $DIRECTORY ]
+ * drush git init --base [ --package $PACKAGE ] [ $DIRECTORY ]
  *                $BASE_URL [ $DIRECTORY ]
  *
  * Initialize a Base drupal directory or a new Drupal site.
@@ -167,7 +169,7 @@ function drush_git_init() {
 /**
  * Initialize a base Drupal repository.
  */
-function _git_init_base($package, $directory) {
+function _git_init_base($package = '', $directory = '') {
 	
 	// We must have specified a valid(ish) drupal package name. 
 	if (!$package) {
@@ -188,10 +190,6 @@ function _git_init_base($package, $directory) {
     $orig_dest = $destination . "$project-$version";
     $new_dest  = $orig_dest;
     
-    print "$project\n";
-    print "$version\n";
-    print "$orig_dest\n";
-    
     if ($directory) {
     	$new_dest = $directory;
     }
@@ -202,9 +200,6 @@ function _git_init_base($package, $directory) {
     }
     
     if (chdir($new_dest)) {
-    	// We are at the new site.
-    	print getcwd() . "\n";
-    	
     	// Intialize sites/all/modules directory.
     	mkdir('sites/all/modules', 0755, TRUE);
     	
@@ -262,14 +257,11 @@ function _git_init_base($package, $directory) {
       
       # Initialize default site data directory.
       if (chdir('sites/default')) {
-        // We are in the data directory.
-        print getcwd() . "\n";
-        
         // Initialize site data file directory.
         mkdir('files', 0777, TRUE);
         
         // Set up public ignores.
-        $fh = fopen(".gitignore", 'w');
+        $fh = fopen("files/README.txt", 'w');
         fwrite($fh, 
           "All shared platform files go here.\n\n"
         . "Sync the backup of this directory with the database backup schedule.\n"
@@ -309,20 +301,18 @@ function _git_init_base($package, $directory) {
 
 /**
  * Initialize a Drupal site from a base Drupal repository.
- *
- * @param unknown_type $base_url
- * @param unknown_type $directory
  */
-function _git_init_site($base_url, $directory) {
+function _git_init_site($base_url, $directory = '') {
 	
 }
 
 //------------------------------------------------------------------------------
 
 /**
- * Git dl
+ * git dl
  * 
- * drush git dl [ -b ] [ -s SSH_URL ] PACKAGE ...
+ * drush git dl --base [ --destination $DIRECTORY ] $PACKAGE ...
+ *              [ --ssh-url $URL ] $PACKAGE ...
  *
  * Install or update packages in a base drupal directory or a new Drupal site.
  * 
@@ -340,17 +330,87 @@ function _git_init_site($base_url, $directory) {
  *
  */
 function drush_git_dl() {
-  $commands = func_get_args();
+  // Bootstrap to the highest level possible.
+  drush_bootstrap_max();
+
+  drush_include_engine('package_handler', drush_get_option('package-handler', 'wget'));
   
+  // Initialize arguments.
+  $is_base = drush_get_option('base');
+  $args    = func_get_args();
   
+  // Choose handler based on value of "--base".
+  if (!empty($is_base)) {
+    _git_dl_base($args, drush_get_option('destination'));    
+  }
+  else {
+    _git_dl_site($args, drush_get_option('ssh-url'));
+  }  
+}
+
+//------------------------------------------------------------------------------
+
+function _git_dl_base($packages) {
+	
+	foreach ($packages as $package) {
+    // We must have specified a valid(ish) drupal package name. 
+    if (!$package) {
+      drush_set_error('DRUSH_GIT_PACKAGE_INVALID', dt('You have not specified any package names')); 
+    }
+    elseif (preg_match('/^drupal\-/', $package)) {
+      drush_set_error('DRUSH_GIT_PACKAGE_INVALID', dt('You may not specify the core drupal project, @package', 
+        array('@package' => $package))
+      );  
+    }
+  
+    // Download project package.
+    list($project, $release, $destination) = _git_package_download($package);
+  
+    if (!is_null($project)) {
+      $version = $release['version'];
+      
+      drush_print("Installing $project ( $version ) into $destination");
+      
+      // Record this package in git.
+      drush_shell_exec("git config package.$project.path $destination");
+      
+      if (chdir("$destination/$project")) {
+        if (!is_dir('.git')) {
+        	drush_shell_exec("git init");
+        }
+        
+        // Copy all hooks over from ~/hooks (if they exist)
+        _git_copy_hooks();
+        
+        // Add all files and commit.
+        drush_shell_exec(
+            "git add .;"
+          . " git commit -m 'Project $project - $version.';"
+          . " git tag $version;"
+        );
+    
+      } else {
+        drush_set_error('DRUSH_GIT_CHDIR_FAILED', dt('Unable to change directory to, @dest', 
+          array('@dest' => "$destination/$project"))
+        );	
+      }	
+    }	
+  }
+}
+
+//------------------------------------------------------------------------------
+
+function _git_dl_site($packages, $ssh_url = '') {
+	
 }
 
 //------------------------------------------------------------------------------
 
 /**
- * Git update
+ * git update
  * 
- * drush git update
+ * drush git update --base [ $PACKAGE ... ]
+ *                  [ $PACKAGE ... ]
  *
  * Update all packages in this base repository or Drupal site.
  * 
@@ -367,9 +427,39 @@ function drush_git_dl() {
  *
  */
 function drush_git_update() {
-  $commands = func_get_args();
+  // Bootstrap to the highest level possible.
+  drush_bootstrap_max();
+
+  drush_include_engine('package_handler', drush_get_option('package-handler', 'wget'));
   
+  // Initialize arguments.
+  $is_base = drush_get_option('base');
+  $args    = func_get_args();
   
+  // Choose handler based on value of "--base".
+  if (!empty($is_base)) {
+    _git_update_base($args);    
+  }
+  else {
+    _git_update_site($args);
+  }  
+}
+
+//------------------------------------------------------------------------------
+
+function _git_update_base($packages = array()) {
+
+	if (!count($packages)) {
+		$packages = _git_find_packages();
+	}
+	
+	_git_dl_base($packages);	
+}
+
+//------------------------------------------------------------------------------
+
+function _git_update_site($packages = array()) {
+	
 }
 
 //------------------------------------------------------------------------------
@@ -378,6 +468,11 @@ function drush_git_update() {
 
 //------------------------------------------------------------------------------
 
+/**
+ * Download a project package from Drupal.
+ * 
+ * TODO:  Check if we have the current version before downloading!!!!
+ */
 function _git_package_download($package_name) {
   $requestdata = pm_parse_project_version(array($package_name));
   
@@ -478,5 +573,36 @@ function _git_copy_hooks() {
     copy("$hook_dir/$file", ".git/hooks/$file");
     chmod(".git/hooks/$file", 0755);
   }
+}
+
+//------------------------------------------------------------------------------
+
+function _git_find_packages() {
+	
+	$site_path = drush_locate_root();
+	$packages  = array();	
+	
+	if ($site_path) {
+		
+		$curr_dir = getcwd();
+		chdir($site_path);
+		
+	  // Make sure our drupal instance is a git repository.
+		if (is_dir("$site_path/.git")) {
+			$configurations = explode("\n", shell_exec("git config -l"));
+	  	
+	  	foreach ($configurations as $config) {
+	  		if (preg_match('/^package\.([\.]+)\.path=(.+)$/', $config, $matches)) {
+	  			$project     = $matches[1];
+	  			$destination = $matches[2]; # We might could use this.
+	  			
+	  			$packages[] = $project;	  			
+	  		}	  		
+	  	}
+	  }
+
+	  chdir($curr_dir);
+	}
+	return $packages;	
 }
 
