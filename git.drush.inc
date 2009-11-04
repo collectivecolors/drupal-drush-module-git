@@ -107,8 +107,14 @@ function git_drush_command() {
  */
 function git_drush_help($section) {
   switch ($section) {
-    case 'drush:git':
-      return dt("A collection of Git Drupal package management commands.");
+    case 'drush:git init':
+      return dt("Initialize a Drupal base repository or a site.");
+      
+    case 'drush:git dl':
+      return dt("Install or upgrade Drupal packages in a base repository or site.");
+      
+    case 'drush:git update':
+      return dt("Update Drupal repository and all sub packages.");
   }
 }
 
