@@ -15,48 +15,47 @@ function git_is_repository($path) {
 
 //------------------------------------------------------------------------------
 
-function git_drupal_path() {
-  $path = drush_locate_root();
+function git_project_path($project = NULL, $require_repo = FALSE) {
   
-  if (git_is_repository($path)) {
-    // We are on a Drupal site with a Git repository.
-    return $path;  
+  if (!$project || $project == 'drupal') {
+    $path = drush_locate_root();
   }
+  else {
+    git_include('project');
+    
+    $info = git_project_info($project);
+    $path = (is_array($info) ? $info['path'] : NULL);
+  } 
+  
+  if (!$require_repo || git_is_repository($path)) {   
+    return $path;
+  } 
   return NULL;
+}
+
+//------------------------------------------------------------------------------
+
+function git_cd_project($project = NULL) {
+  
+  $path = git_project_path($project);
+  $pwd  = getcwd();
+  
+  if ($path && chdir($path)) {
+    return $pwd;
+  }
+  return FALSE;
+}
+
+//------------------------------------------------------------------------------
+
+function git_drupal_path($require_repo = TRUE) {
+  return git_project_path(NULL, $require_repo);
 }
 
 //------------------------------------------------------------------------------
 
 function git_cd_drupal() {
   return git_cd_project();
-}
-
-//------------------------------------------------------------------------------
-
-function git_project_path($project = NULL) {
-	
-	if (!$project || $project == 'drupal') {
-    return git_drupal_path();
-	}
-		
-	git_include('project');
-	$info = git_project_info($project);
-	
-	if (is_array($info)) {
-		return $info['path'];
-	}	
-	return NULL;
-}
-
-//------------------------------------------------------------------------------
-
-function git_cd_project($project = NULL) {
-  $path = git_project_path($project);
-  
-  if ($path && chdir($path)) {
-    return TRUE;
-  }
-  return FALSE;
 }
 
 //------------------------------------------------------------------------------
