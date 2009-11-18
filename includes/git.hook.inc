@@ -37,7 +37,7 @@ function git_hooks_from_path($path, $executable_only = FALSE) {
  */
 function git_hooks($project = NULL, $executable_only = TRUE) {
 	
-	git_include('filesystem');
+	git_include('base.project');
   $path = git_project_path($project, TRUE);
   
   if ($path) {
@@ -48,17 +48,14 @@ function git_hooks($project = NULL, $executable_only = TRUE) {
 //------------------------------------------------------------------------------
 
 /**
- * Copy all hooks defined in specified path to specified repository.
+ * Copy all hooks defined in specified path to specified path.
  */
-function git_copy_hooks($project = NULL, $hook_path = NULL) {
-	
-	git_include('filesystem');
-	$path = git_project_path($project);
-	
+function git_copy_hooks_into_path($path, $hook_path = NULL) {
+
 	if ($path) {
-		if (!$hook_path) {
+    if (!$hook_path) {
       $hook_path = drush_get_option('hook-dir', $_SERVER['HOME'] . '/hooks');
-		}
+    }
     $hooks = git_hooks_from_path($hook_path, FALSE);
   
     // Add hooks to specified project.
@@ -66,6 +63,21 @@ function git_copy_hooks($project = NULL, $hook_path = NULL) {
       copy("$hook_path/$file", "$path/.git/hooks/$file");
       chmod("$path/.git/hooks/$file", 0755);
     }
+  }	
+}
+
+//------------------------------------------------------------------------------
+
+/**
+ * Copy all hooks defined in specified path to specified repository.
+ */
+function git_copy_hooks($project = NULL, $hook_path = NULL) {
+	
+	git_include('base.project');
+	$path = git_project_path($project);
+	
+	if ($path) {
+		git_copy_hooks_into_path($path, $hook_path);
   }
 }
 
