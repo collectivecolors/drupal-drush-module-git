@@ -8,58 +8,6 @@
 // Directory utilities
 //------------------------------------------------------------------------------
 
-function git_is_repository($path) {
-	// TODO: Make the Git check more thorough?
-  return ($path && is_dir("$path/.git"));
-}
-
-//------------------------------------------------------------------------------
-
-function git_project_path($project = NULL, $require_repo = FALSE) {
-  
-  if (!$project || $project == 'drupal') {
-    $path = drush_locate_root();
-  }
-  else {
-    git_include('project');
-    
-    $info = git_project_info($project);
-    $path = (is_array($info) ? $info['path'] : NULL);
-  } 
-  
-  if (!$require_repo || git_is_repository($path)) {   
-    return $path;
-  } 
-  return NULL;
-}
-
-//------------------------------------------------------------------------------
-
-function git_cd_project($project = NULL) {
-  
-  $path = git_project_path($project);
-  $pwd  = getcwd();
-  
-  if ($path && chdir($path)) {
-    return $pwd;
-  }
-  return FALSE;
-}
-
-//------------------------------------------------------------------------------
-
-function git_drupal_path($require_repo = TRUE) {
-  return git_project_path(NULL, $require_repo);
-}
-
-//------------------------------------------------------------------------------
-
-function git_cd_drupal() {
-  return git_cd_project();
-}
-
-//------------------------------------------------------------------------------
-
 function git_path_init($path, $files = array(), $perm = 0755) {
   
   mkdir($path, $perm, TRUE);
