@@ -7,32 +7,32 @@
 function git_shell_exec($path, $commands, $abort = TRUE) {
 	
 	$pwd = getcwd();
-  if (!$path || !chdir($path)) {
+  if (!$path || ($path != '.' && !chdir($path))) {
     return FALSE;
   }
   
   if (!is_array($commands)) {
     $commands = array($commands);
   }  
-  $status = FALSE;
+  $status = TRUE;
   
   foreach ($commands as $cmd) {
     $status = drush_shell_exec($cmd, 2);
     
     if ($abort && !$status) {
-    	chdir($pwd);
-      return $status;
+    	break;
     }   
-  }  
-  chdir($pwd);
+  }
+  ($path != '.' && chdir($pwd)); 
   return $status;
 }
+
 //------------------------------------------------------------------------------
 
 function git_shell_capture($path, $commands, $abort = TRUE) {
 
   $pwd = getcwd();
-  if (!$path || !chdir($path)) {
+  if (!$path || ($path != '.' && !chdir($path))) {
     return NULL;
   }
   
@@ -44,18 +44,21 @@ function git_shell_capture($path, $commands, $abort = TRUE) {
   if ($last_command) {
     $pre_commands = $commands;
     $lines        = NULL;
+    
+    $status = TRUE;
   
     foreach ($pre_commands as $cmd) {
       $status = drush_shell_exec($cmd, 2);
     
       if ($abort && !$status) {
-        chdir($pwd);
-        return $lines;
+        break;
       }   
+    }    
+    if ($status) {
+      $lines = array_filter(explode("\n", shell_exec($last_command)));
     }
-    $lines = explode("\n", shell_exec($last_command));
   }
-  chdir($pwd);
+  ($path != '.' && chdir($pwd));
   return $lines;
 }
 
