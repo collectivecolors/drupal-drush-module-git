@@ -127,7 +127,7 @@ function git_project_add($project, $mode = GIT_LIST_NO_DEV, $checkout_branch = T
 	foreach ($configs as $property => $value) {
 	  $commands[] = "git config drush.project.$project.$property $value";	
 	}		
-	return git_shell_exec($info['path'], $commands);
+	return git_shell_exec(git_drupal_path(), $commands);
 }
 
 //------------------------------------------------------------------------------
