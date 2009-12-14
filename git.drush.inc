@@ -15,7 +15,7 @@
  *
  *   Commands pertaining to managing Drupal instances with Git.
  *
- *   You can copy this file to any of the following
+ *   You can copy this files folder to any of the following
  *     1. A .drush folder in your HOME folder.
  *     2. Anywhere in a folder tree below an active module on your site.
  *     3. In an arbitrary folder specified with the --include option.
@@ -39,47 +39,93 @@
 function git_drush_command() {
   $items = array();
 
-  $items['git init'] = array(
-    'callback' => 'drush_git_init',
-    'description' => "Initialize a Drupal base repository or a site.",
+  $items['git base init'] = array(
+    'callback' => 'drush_git_base_init',
+    'description' => "Initialize a Drupal base repository.",
     'arguments' => array(
-      'origin' => 'Origin url of the base repository for this site.  Not used on base installations.',
       'directory' => 'Directory to put this Drupal site into.  Defaults to "drupal-$VERSION".',
     ),
     'options' => array(
-      '--tag' => 'Checkout the specific tag of the requested project package.  Note that this will create a detached head.',
-      '--base' => 'Specify this flag if you are initializing a base Drupal repository.',
-      '--package' => 'A specific package version of drupal to download. Only used when "--base" option is specified.',
-      '--mode' => 'The download and commit mode for this project. Allowed values are; "all", "nodev", and "onlydev"',      
+      '--version' => 'A specific version of Drupal to download. Only used when "--base" option is specified.',
+      '--mode' => 'The download and commit mode for this project. Allowed values are; "all", "nodev", and "onlydev". Only used when "--base" option is specified.',      
     ),
     'examples' => array(
-      'git init git://example.com/drupal-6' => 'Initialize a new Drupal site into a "drupal-$VERSION" directory.',
-      'git init git://example.com/drupal-6 mysite' => 'Initialize a new Drupal site into the "mysite" directory.',
-      'git init --base drupal' => 'Initialize a base repository into the "drupal" directory.',
+      'git base init --version=6 drupal' => 'Initialize a Drupal 6 base repository into the "drupal" directory.',
+    ),
+    'bootstrap' => DRUSH_BOOTSTRAP_DRUSH,
+  );
+  $items['git site init'] = array(
+    'callback' => 'drush_git_site_init',
+    'description' => "Initialize a new Drupal site.",
+    'arguments' => array(
+      'origin' => 'Origin url of the base repository for this site.',
+      'directory' => 'Directory to put this Drupal site into.  Defaults to current directory.',
+    ),
+    'options' => array(
+      '--data-url' => 'Git url for the Drupal site data repository.',
+      '--data-path' => 'Directory to put the site data repository into.',
+      '--checkout' => 'Checkout the head of a branch or a particular tag for this site.',      
+    ),
+    'examples' => array(
+      'git site init git://example.com/drupal6' => 'Initialize a new Drupal site into the current directory.',
+      'git site init git://example.com/drupal6 mysite' => 'Initialize a new Drupal site into the "mysite" directory.',
+    ),
+    'bootstrap' => DRUSH_BOOTSTRAP_DRUSH,
+  );
+  $items['git site clone'] = array(
+    'callback' => 'drush_git_site_clone',
+    'description' => "Clone an existing Drupal site.",
+    'arguments' => array(
+      'origin' => 'Origin url of the site repository to clone from.',
+      'directory' => 'Directory to put this Drupal site into.  Defaults to current directory.',
+    ),
+    'options' => array(
+      '--data-url' => 'Git url for the Drupal site data repository.',
+      '--data-path' => 'Directory to put the site data repository into.',
+      '--checkout' => 'Checkout the head of a branch or a particular tag for this site.',        
+    ),
+    'examples' => array(
+      'git site clone git://example.com/mysite' => 'Clone the "mysite" Drupal site into the current directory.',
+      'git site clone git://example.com/mysite mysite' => 'Initialize a new Drupal site into the "mysite" directory.',
     ),
     'bootstrap' => DRUSH_BOOTSTRAP_DRUSH,
   );
   
   $items['git add'] = array(
     'callback' => 'drush_git_add',
-    'description' => "Install or upgrade Drupal packages in a base repository or site.",
+    'description' => "Install new Drupal projects in a base repository or site.",
     'arguments' => array(
-      'packages' => 'A space separated list of project names, with optional version.',
+      'projects' => 'A space separated list of project names.',
+    ),
+    'options' => array(
+      '--mode' => 'The download and commit mode for the projects being added. Allowed values are; "all", "nodev", and "onlydev"',      
     ),
     'examples' => array(
-      'git add diff-6.x-2.0' => 'Download a specfic version of diff module.',
-      'git add cck zen' => 'Download latest versions of Zen for my version of Drupal.',
+      'git add cck zen' => 'Download latest versions of CCK and Zen for this version of Drupal.',
+      'git add --mode=all cck zen' => 'Download latest versions (including dev releases) of CCK and Zen for this version of Drupal.',
+    ),
+    'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_ROOT,
+  );  
+  
+  $items['git rm'] = array(
+    'callback' => 'drush_git_remove',
+    'description' => "Remove Drupal projects in a base repository or site.",
+    'arguments' => array(
+      'projects' => 'A space separated list of project names.',
+    ),
+    'examples' => array(
+      'git rm cck zen' => 'Remove the CCK and Zen projects from this Drupal installation.',
     ),
     'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_ROOT,
   );  
   
   $items['git update'] = array(
     'callback' => 'drush_git_update',
-    'description' => "Update Drupal repository and all sub packages.",
+    'description' => "Update Drupal repository and all sub projects.",
     'examples' => array(
       'git update' => 'Update all projects in base Drupal repository or site', 
     ),
-    'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_DRUSH,
+    'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_ROOT,
   );  
 
   return $items;
@@ -101,14 +147,23 @@ function git_drush_command() {
  */
 function git_drush_help($section) {
   switch ($section) {
-    case 'drush:git init':
-      return dt("Initialize a Drupal base repository or a site.");
+    case 'drush:git base init':
+      return dt("Initialize a Drupal base repository.");
+      
+    case 'drush:git site init':
+      return dt("Initialize a new Drupal site.");
+      
+    case 'drush:git site clone':
+      return dt("Clone an existing Drupal site.");
       
     case 'drush:git add':
-      return dt("Install or upgrade Drupal packages in a base repository or site.");
+      return dt("Install new Drupal projects in a base repository or site.");
+      
+    case 'drush:git rm':
+      return dt("Remove Drupal projects in a base repository or site.");
       
     case 'drush:git update':
-      return dt("Update Drupal repository and all sub packages.");
+      return dt("Update Drupal repository and all sub projects.");
   }
 }
 
@@ -116,68 +171,66 @@ function git_drush_help($section) {
 // Callbacks
 
 /**
- * git init
+ * Initialize a Drupal base repository.
  * 
- * drush git init --base [ --package=$PACKAGE ]
- *                $BASE_URL
- *
- * Initialize a Base Drupal directory or a new Drupal site.
+ * git base init [ $DESTINATION ]
+ *    [ --version=$VERSION ] 
+ *    [ --mode=$MODE ]
  * 
- * If you are creating a base Drupal repository:
+ * $DESTINATION = Destination directory for the project.
  * 
- *  * The core platform and packages are downloaded from Drupal through drush.
- * 
- *  * Package directories contain totally separate ( no submodule ) repositories
- *    that are not cloned with the core platform.
- * 
- * If you are creating a new Drupal site:
- * 
- *  * The core platform is cloned from the base repo.
- *
+ * $VERSION  = Drupal version to retrieve. Ex; 6
+ * $MODE     = MODE_ALL ('all') | MODE_NO_DEV ('nodev') | MODE_ONLY_DEV ('onlydev')
  */
-function drush_git_init() {
-	  
-  // Choose handler based on value of "--base".
-  if (drush_get_option('base', FALSE)) {
-  	_git_init_base();    
-  }
-  else {
-  	$args = func_get_args();
-  	_git_init_site($args[0]);
-  }  
+function drush_git_base_init() {
+	git_include('base');
+	
+	list($directory) = func_get_args();
+	if ($directory) {
+		drush_set_option('destination', $directory);
+	}	
+	$drupal = new Base(drush_get_option('mode', Base::MODE_NO_DEV), FALSE);
+	return $drupal->update();
 }
 
 //------------------------------------------------------------------------------
 
 /**
- * Initialize a base Drupal repository.
+ * Initialize a new Drupal site.
+ * 
+ * git site init $BASE_URL [ $DESTINATION ]
+ *    [ --data-url=$DATA_URL ] 
+ *    [ --data-path=$DATA_PATH ]
+ *    [ --checkout=$CHECKOUT ]
+ *
+ * $BASE_URL = Base repository url to clone from. 
+ * $DESTINATION = Destination directory for the project.
+ * 
+ * $DATA_URL = Drupal data repository url. Defaults to "$BASE_URL/sites/default"
+ * $DATA_PATH = Directory to put the site data repository into. Defaults to "sites/default".
+ * $CHECKOUT = Git tag or branch to checkout when initialized.
  */
-function _git_init_base() {	
-	git_include('validation', 'base.project');
+function drush_git_site_init() {
+	git_include('site');
 	
-	$package = git_validate_drupal_package(drush_get_option('package'));
+	list($base_url, $directory) = func_get_args();
 	
-	if ($package) {
-    git_project_add($package,
-      drush_get_option('mode', GIT_LIST_NO_DEV),
-      !drush_get_option('tag', FALSE)
-    );
+	if ($directory) {
+		drush_set_option('destination', $directory);
 	}
-}
-
-//------------------------------------------------------------------------------
-
-/**
- * Initialize a Drupal site from a base Drupal repository.
- */
-function _git_init_site($base_url, $directory = '') {
+	$drupal = new Site($base_url);
 	
-	if (!$directory) {
-		$directory = '.';
+	if ($data_url = drupal_get_option('data-url')) {
+    $drupal->set_data_url($data_url);
 	}
+	if ($data_path = drupal_get_options('data-path')) {
+		$drupal->set_data_path($data_path);
+	}
+	
+	return $drupal->update(drupal_get_option('checkout', NULL));
 	
 	// Default site information.
-	$site_url = preg_replace('/\/?$/', '', $base_url) . '/sites/default';
+	/*$site_url = preg_replace('/\/?$/', '', $base_url) . '/sites/default';
 	  
 	// Initialize Drupal site.
 	drush_shell_exec("git clone '$base_url' '$directory'");	
@@ -188,7 +241,28 @@ function _git_init_site($base_url, $directory = '') {
   	
   	// Mark this as a non base repository for add and update commands.
     drush_shell_exec("git config drush.site true");
-  }
+  }*/
+}
+
+//------------------------------------------------------------------------------
+
+/**
+ * Clone an existing Drupal site.
+ * 
+ * git site clone $SITE_URL [ $DESTINATION ]
+ *    [ --data-url=$DATA_URL ] 
+ *    [ --data-path=$DATA_PATH ]
+ *    [ --checkout=$CHECKOUT ]
+ *
+ * $SITE_URL = Site repository url to clone from. 
+ * $DESTINATION = Destination directory for the project.
+ * 
+ * $DATA_URL = Drupal data repository url. Defaults to "$SITE_URL/sites/default"
+ * $DATA_PATH = Directory to put the site data repository into. Defaults to "sites/default".
+ * $CHECKOUT = Git tag or branch to checkout when initialized.
+ */
+function drush_git_site_clone() {
+	
 }
 
 //------------------------------------------------------------------------------
@@ -196,8 +270,8 @@ function _git_init_site($base_url, $directory = '') {
 /**
  * git add
  * 
- * drush git add [ --destination $DIRECTORY ] $PACKAGE ...
- *               [ --ssh-url $URL ] $PACKAGE ...
+ * drush git add [ --mode=$MODE ] $PROJECT ...
+ *               $PROJECT ...
  *
  * Install or update packages in a base drupal directory or a new Drupal site.
  * 
@@ -205,7 +279,7 @@ function _git_init_site($base_url, $directory = '') {
  * 
  *  * The packages are downloaded from Drupal through drush.
  * 
- *  * Packages are updated and recommited if they already exist in the 
+ *  * Packages are updated and recommitted if they already exist in the 
  *    directory structure.
  * 
  * If you are creating a new Drupal site:
@@ -215,70 +289,95 @@ function _git_init_site($base_url, $directory = '') {
  *
  */
 function drush_git_add() {
+	git_include('gitcore');
 	
-  // Check for Git repository.
-	if (!_git_cd_top_dir()) {
+	$path = drush_locate_root();	
+  if (!GitCore::is_repository($path)) {
 		return;
 	}
-	
+		
   $args = func_get_args();
   
-  if (shell_exec("git config drush.site") != 'true') {
+  if (GitCore::get_config($path, 'drush.site') == 'false') {
   	_git_add_base($args);
   }
   else {
-    _git_add_site($args);      
-  }  
+    //_git_add_site($args);      
+  }
 }
 
 //------------------------------------------------------------------------------
 
-function _git_add_base($packages) {
+function _git_add_base($projects) {
+	git_include('base');
 	
-	if (!_git_validate_contrib_packages($packages)) {
-      return;
-  }
+	$drupal = new Base(NULL, FALSE);
+	
+	foreach ($projects as $name) {
+		
+		if ($name == 'drupal') {
+			continue;
+		}		
+		if (!$drupal->add_project($name, drush_get_option('mode', Base::MODE_NO_DEV))) {
+			return FALSE;
+		}
+	}
+	return TRUE;	
+}
+
+//------------------------------------------------------------------------------
+
+function _git_add_site($projects) {
+	
+}
+
+//------------------------------------------------------------------------------
+
+/**
+ * git rm
+ * 
+ * drush git rm $PROJECT ...
+ *
+ * Remove installed projects in a base Drupal directory or a new Drupal site.
+ */
+function drush_git_remove() {
+  git_include('gitcore');
   
-  foreach ($packages as $package) {
-  	
-  	$info = _git_project_info($package);
+  $path = drush_locate_root();  
+  if (!GitCore::is_repository($path)) {
+    return;
+  }
     
-  	$project = $info['name'];
-    $path    = $info['path'];
-    
-    if (is_null(($release = _git_project_release($package)))) {
-    	return;
-    }
-    $version = $release['version'];  	
-  	
-    drush_print("Installing $project ( $version ) into $path");
-    if (_git_project_download($info, $release)) {      
-      
-      if (!is_dir("$path/.git")) {
-        drush_shell_exec("git init '$path'");
-      }
-        
-      // Copy all hooks over from ~/hooks (if they exist)
-      _git_copy_hooks($path);
-        
-      // Add all files and commit.
-      drush_shell_exec(
-          "git --git-dir='$path/.git' add .;"
-        . " git --git-dir='$path/.git' commit -m 'Project $project - $version.';"
-        . " git --git-dir='$path/.git' tag $version 2>/dev/null;"
-      );
-    }     
-      
-    // Record this project in git.  Do this at the very end!!!
-    drush_shell_exec("git config drush.project.$project.path $path");
-    drush_shell_exec("git config drush.project.$project.version $version"); // Current version checked out.  	  
+  $args = func_get_args();
+  
+  if (GitCore::get_config($path, 'drush.site') == 'false') {
+    _git_remove_base($args);
+  }
+  else {
+    //_git_remove_site($args);      
   }
 }
 
 //------------------------------------------------------------------------------
 
-function _git_add_site($packages) {
-	
+function _git_remove_base($projects) {
+  git_include('base');
+  
+  $drupal = new Base(NULL, FALSE);
+  
+  foreach ($projects as $name) {
+    
+    if (!$drupal->remove_project($name)) {
+    	return FALSE;
+    }
+  }
+  return TRUE;  
+}
+
+//------------------------------------------------------------------------------
+
+function _git_remove_site($projects) {
+  
 }
 
 //------------------------------------------------------------------------------
@@ -303,28 +402,28 @@ function _git_add_site($packages) {
  *
  */
 function drush_git_update() {
-
-  // Check for Git repository.
-  /*if (!_git_cd_top_dir()) {
-    return;
-  }*/  
+  git_include('gitcore');
   
-  //if (shell_exec("git config drush.site") != 'true') {
-    //_git_update_base();
-    foreach (func_get_args() as $package) {
-    	_git_project_download($package);
-    }
-  //}
-  //else {
-    //_git_update_site();
-  //}
+  $path = drush_locate_root();  
+  if (!GitCore::is_repository($path)) {
+    return;
+  }
+  
+  if (GitCore::get_config($path, 'drush.site') == 'false') {
+    _git_update_base();
+  }
+  else {
+    //_git_update_site();      
+  }
 }
 
 //------------------------------------------------------------------------------
 
 function _git_update_base() {  
-	$projects = _git_load_projects();
-	_git_add_base($projects);	
+	git_include('base');
+  
+  $drupal = new Base(NULL, FALSE);
+  return $drupal->update();
 }
 
 //------------------------------------------------------------------------------
